@@ -34,7 +34,7 @@ button:hover { border-color: var(--faint); }
 .sq.l { background: var(--light); }
 .sq.d { background: var(--dark) center / 100% 100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M-5 16c10-6 20 6 30 0s20 6 30 0 20 6 30 0M-5 40c10-6 20 6 30 0s20 6 30 0 20 6 30 0' fill='none' stroke='%23fff' stroke-opacity='.09' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"); }
 .sq:has(.pc) { cursor: grab; }
-.ghost { position: fixed; z-index: 10; pointer-events: none; transform: scale(1.12); }
+.pc.ghost { position: fixed; z-index: 10; pointer-events: none; transform: scale(1.12); cursor: grabbing; }
 .sq.last::before, .sq.sel::before, .sq.best::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
 .sq.last::before { background: rgba(236,140,200,.45); }
 .sq.sel::before { background: rgba(55,138,221,.45); }
