@@ -9,7 +9,7 @@
   --bg: #f6f5f1; --card: #fff; --text: #1f1f1d; --muted: #6b6a65; --faint: #9a9890; --border: rgba(0,0,0,.12);
   --accent: #185fa5; --accent-bg: #e6f1fb; --success: #3b6d11; --success-bg: #eaf3de;
   --warning: #854f0b; --warning-bg: #faeeda; --danger: #a32d2d; --danger-bg: #fcebeb; --pred: #7f77dd;
-  --light: #ebd9b4; --dark: #b58863; --bw: min(480px, calc(100vw - 64px));
+  --light: #fbf0e6; --dark: #4a8aa6; --frame: #4b3f8f; --bw: min(480px, calc(100vw - 64px));
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #1b1b1a; --card: #262624; --text: #ecebe6; --muted: #a9a79f; --faint: #7d7b74; --border: rgba(255,255,255,.14);
@@ -29,23 +29,26 @@ button:hover { border-color: var(--faint); }
 .boardwrap { display: flex; gap: 8px; }
 .evalbar { width: 16px; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border); background: #f1efe8; }
 .evalbar div { background: #2c2c2a; transition: height .3s; }
-#board { width: var(--bw); height: var(--bw); display: grid; grid-template: repeat(8, minmax(0, 1fr)) / repeat(8, minmax(0, 1fr)); border-radius: 6px; overflow: hidden; flex: none; }
+#board { width: var(--bw); height: var(--bw); display: grid; grid-template: repeat(8, minmax(0, 1fr)) / repeat(8, minmax(0, 1fr)); border: 10px solid var(--frame); border-radius: 12px; overflow: hidden; flex: none; touch-action: none; }
 .sq { position: relative; border: 0; border-radius: 0; padding: 0; min-width: 0; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.sq.l { background: var(--light); } .sq.d { background: var(--dark); }
+.sq.l { background: var(--light); }
+.sq.d { background: var(--dark) center / 100% 100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M-5 16c10-6 20 6 30 0s20 6 30 0 20 6 30 0M-5 40c10-6 20 6 30 0s20 6 30 0 20 6 30 0' fill='none' stroke='%23fff' stroke-opacity='.09' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.sq:has(.pc) { cursor: grab; }
+.ghost { position: fixed; z-index: 10; pointer-events: none; transform: scale(1.12); }
 .sq.last::before, .sq.sel::before, .sq.best::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-.sq.last::before { background: rgba(239,159,39,.42); }
+.sq.last::before { background: rgba(236,140,200,.45); }
 .sq.sel::before { background: rgba(55,138,221,.45); }
 .sq.best::after { box-shadow: inset 0 0 0 4px #1d9e75; }
 .sq.dot::after { content: ""; position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(0,0,0,.22); pointer-events: none; }
 .sq.dot.cap::after { width: 86%; height: 86%; background: none; border: 5px solid rgba(0,0,0,.22); }
 .pc { position: relative; z-index: 1; width: 88%; height: 88%; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
-.pc.w { fill: #faf7f0; stroke: #2c2c2a; }
-.pc.b { fill: #2f2e2b; stroke: #0f0f0e; }
-.pc .x { fill: none; } .pc.w .x { stroke: #2c2c2a; } .pc.b .x { stroke: #e9e4d8; }
-.pc .e { stroke: none; } .pc.w .e { fill: #2c2c2a; } .pc.b .e { fill: #e9e4d8; }
+.pc.w { fill: #f7c9d4; stroke: #6e3f7c; filter: drop-shadow(-1.5px 0 0 #a993e0); }
+.pc.b { fill: #33386f; stroke: #1b1d44; filter: drop-shadow(1.5px 0 0 #e79ad3); }
+.pc .x { fill: none; } .pc.w .x { stroke: #b4679c; } .pc.b .x { stroke: #c9b6f2; }
+.pc .e { stroke: none; } .pc.w .e { fill: #6e3f7c; } .pc.b .e { fill: #f2d0ec; }
 .coord { position: absolute; font: 600 11px system-ui, sans-serif; opacity: .7; pointer-events: none; }
 .coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 2px; }
-.sq.l .coord { color: var(--dark); } .sq.d .coord { color: var(--light); }
+.sq.l .coord { color: #2f5f78; } .sq.d .coord { color: var(--light); }
 .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 0 0 24px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .side { display: flex; flex-direction: column; gap: 12px; }
@@ -168,16 +171,51 @@ function gradeLast() {
   });
 }
 
-function click(sq) {
-  const s = cur();
-  if (busy || status(s)) return;
-  if (sel !== null) {
-    const c = legal(s).filter(m => m.from === sel && m.to === sq);
-    if (c.length) return play(c.find(m => !m.promo || m.promo.toLowerCase() === $('promo').value));
-  }
-  sel = color(s.b[sq]) === s.turn && sel !== sq ? sq : null;
-  renderBoard();
+function tryMove(from, to) {
+  const c = legal(cur()).filter(m => m.from === from && m.to === to);
+  if (c.length) play(c.find(m => !m.promo || m.promo.toLowerCase() === $('promo').value));
+  return c.length > 0;
 }
+
+// Pointer input: press-and-drag moves a piece; press-and-release without moving acts as a click.
+let drag = null;
+const sqAt = (x, y) => { const el = document.elementFromPoint(x, y)?.closest('#board [data-sq]'); return el ? +el.dataset.sq : null; };
+function endDrag() { drag?.ghost?.remove(); drag = null; }
+
+$('board').addEventListener('pointerdown', e => {
+  const el = e.target.closest('[data-sq]'), s = cur();
+  if (!el || busy || status(s) || e.button > 0) return;
+  const sq = +el.dataset.sq;
+  if (sel !== null && sel !== sq && tryMove(sel, sq)) return;
+  if (color(s.b[sq]) !== s.turn) { sel = null; renderBoard(); return; }
+  const wasSel = sel === sq;
+  sel = sq; renderBoard();
+  drag = { sq, wasSel, x: e.clientX, y: e.clientY, ghost: null };
+  $('board').setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+
+$('board').addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.ghost) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
+    const piece = $('board').querySelector(`[data-sq="${drag.sq}"] svg`), size = piece.parentElement.offsetWidth;
+    drag.ghost = piece.cloneNode(true);
+    drag.ghost.classList.add('ghost');
+    Object.assign(drag.ghost.style, { width: size + 'px', height: size + 'px' });
+    drag.size = size; document.body.append(drag.ghost); piece.style.opacity = '.25';
+  }
+  Object.assign(drag.ghost.style, { left: e.clientX - drag.size / 2 + 'px', top: e.clientY - drag.size / 2 + 'px' });
+});
+
+$('board').addEventListener('pointerup', e => {
+  if (!drag) return;
+  const { sq, wasSel, ghost } = drag, to = sqAt(e.clientX, e.clientY);
+  endDrag();
+  if (ghost) { if (to === null || to === sq || !tryMove(sq, to)) renderBoard(); }
+  else if (wasSel) { sel = null; renderBoard(); }
+});
+$('board').addEventListener('pointercancel', () => { endDrag(); renderBoard(); });
 
 function numbered(s, pv) {
   const out = [];
@@ -304,7 +342,6 @@ function renderGraph() {
   $('graph').style.color = 'var(--muted)';
 }
 
-$('board').addEventListener('click', e => { const b = e.target.closest('[data-sq]'); if (b) click(+b.dataset.sq); });
 $('undo').onclick = () => { if (busy || !played.length) return; played.pop(); pos.pop(); an.length = Math.min(an.length, pos.length); sel = null; render(); if (!an[pos.length - 1]) think(); };
 $('flip').onclick = () => { flipped = !flipped; renderBoard(); };
 $('you').onchange = () => { flipped = you() === 'b'; render(); };
