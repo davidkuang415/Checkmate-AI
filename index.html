@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkmate AI</title>
+<style>
+:root {
+  --bg: #f6f5f1; --card: #fff; --text: #1f1f1d; --muted: #6b6a65; --faint: #9a9890; --border: rgba(0,0,0,.12);
+  --accent: #185fa5; --accent-bg: #e6f1fb; --success: #3b6d11; --success-bg: #eaf3de;
+  --warning: #854f0b; --warning-bg: #faeeda; --danger: #a32d2d; --danger-bg: #fcebeb; --pred: #7f77dd;
+  --light: #ebd9b4; --dark: #b58863; --bw: min(480px, calc(100vw - 64px));
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1b1b1a; --card: #262624; --text: #ecebe6; --muted: #a9a79f; --faint: #7d7b74; --border: rgba(255,255,255,.14);
+    --accent: #85b7eb; --accent-bg: #0c447c; --success: #c0dd97; --success-bg: #27500a;
+    --warning: #fac775; --warning-bg: #633806; --danger: #f7c1c1; --danger-bg: #791f1f; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+select, button { font: inherit; font-size: 13px; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+button:hover { border-color: var(--faint); }
+.layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.boardwrap { display: flex; gap: 8px; }
+.evalbar { width: 16px; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border); background: #f1efe8; }
+.evalbar div { background: #2c2c2a; transition: height .3s; }
+#board { width: var(--bw); height: var(--bw); display: grid; grid-template-columns: repeat(8, 1fr); border-radius: 6px; overflow: hidden; }
+.sq { position: relative; border: 0; border-radius: 0; padding: 0; display: flex; align-items: center; justify-content: center;
+  font-size: calc(var(--bw) / 8 * .78); line-height: 1; font-family: "Apple Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif; }
+.sq.l { background: var(--light); } .sq.d { background: var(--dark); }
+.sq.last::before, .sq.sel::before, .sq.best::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+.sq.last::before { background: rgba(239,159,39,.42); }
+.sq.sel::before { background: rgba(55,138,221,.45); }
+.sq.best::after { box-shadow: inset 0 0 0 4px #1d9e75; }
+.sq.dot::after { content: ""; position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(0,0,0,.22); pointer-events: none; }
+.sq.dot.cap::after { width: 86%; height: 86%; background: none; border: 5px solid rgba(0,0,0,.22); }
+.pc { position: relative; z-index: 1; }
+.pc.w { color: #fff; -webkit-text-stroke: 1.2px #2c2c2a; }
+.pc.b { color: #1a1a1a; }
+.coord { position: absolute; font: 600 11px system-ui, sans-serif; opacity: .7; pointer-events: none; }
+.coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 2px; }
+.sq.l .coord { color: var(--dark); } .sq.d .coord { color: var(--light); }
+.meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 6px 0 0 24px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.lbl { font-size: 12px; color: var(--muted); margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.big { font-size: 24px; font-weight: 600; margin: 2px 0 6px; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.success { background: var(--success-bg); color: var(--success); } .warning { background: var(--warning-bg); color: var(--warning); }
+.danger { background: var(--danger-bg); color: var(--danger); } .neutral { background: var(--accent-bg); color: var(--accent); }
+ul.why { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.small { font-size: 12px; color: var(--faint); margin: 6px 0 0; }
+.rec { border: 2px solid #1d9e75; }
+.pred { display: grid; grid-template-columns: 64px 1fr 40px; gap: 6px; align-items: center; font-size: 13px; }
+.track { height: 6px; background: var(--bg); border-radius: 3px; } .track div { height: 100%; background: var(--pred); border-radius: 3px; }
+.moves { font: 13px/1.7 ui-monospace, Menlo, monospace; display: grid; grid-template-columns: 32px 1fr 1fr; max-height: 220px; overflow: auto; }
+.moves span.m { border-radius: 4px; padding: 0 4px; width: fit-content; }
+.mark { font-size: 10px; margin-left: 4px; }
+#graph { width: 100%; height: 90px; display: block; }
+.status { font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tally { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg); margin: 4px 0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>♞ Checkmate AI</h1>
+    <div class="controls">
+      <label>You play <select id="you"><option value="w">White</option><option value="b">Black</option></select></label>
+      <label>Think <select id="think"><option value="500">0.5s</option><option value="1000" selected>1s</option><option value="3000">3s</option></select></label>
+      <label>Promote to <select id="promo"><option value="q">Queen</option><option value="r">Rook</option><option value="b">Bishop</option><option value="n">Knight</option></select></label>
+      <label><input type="checkbox" id="hint" checked> Show hint</label>
+      <button id="undo">Undo</button>
+      <button id="flip">Flip</button>
+      <button id="reset">New game</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section>
+      <div class="boardwrap">
+        <div class="evalbar" aria-hidden="true"><div id="evalfill" style="height:50%"></div></div>
+        <div id="board" role="grid" aria-label="Chessboard"></div>
+      </div>
+      <div class="meta"><span id="evaltext">Eval 0.00</span><span id="searchinfo"></span></div>
+      <div class="card" style="margin-top:12px">
+        <p class="lbl">Evaluation over the game (White's view)</p>
+        <svg id="graph" viewBox="0 0 400 90" preserveAspectRatio="none" role="img" aria-label="Evaluation graph"></svg>
+      </div>
+    </section>
+
+    <section class="side">
+      <div class="card rec" id="recCard"></div>
+      <div class="card" id="lastCard"></div>
+      <div class="card" id="predCard"></div>
+      <div class="grid2">
+        <div class="card"><p class="lbl">Moves</p><div class="moves" id="moves"></div></div>
+        <div class="card" id="tally"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="engine.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const HKEY = 'checkmate-ai-opponent-history';
+const GRADES = ['Best', 'Good', 'Inaccuracy', 'Mistake', 'Blunder'];
+const TONE_BG = { Best: '#1d9e75', Good: '#97c459', Inaccuracy: '#ef9f27', Mistake: '#d85a30', Blunder: '#e24b4a' };
+
+let pos, played, an, sel, busy, flipped = false;
+const cur = () => pos[pos.length - 1];
+const you = () => $('you').value;
+const same = (a, b) => a.from === b.from && a.to === b.to && a.promo === b.promo;
+const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// Opponent move memory: { positionKey: { san: count } } kept in this browser.
+const loadH = () => { try { return JSON.parse(localStorage.getItem(HKEY)) || {}; } catch { return {}; } };
+const saveH = h => { try { localStorage.setItem(HKEY, JSON.stringify(h)); } catch {} };
+
+function reset() { pos = [parseFEN(START)]; played = []; an = []; sel = null; busy = false; render(); think(); }
+
+const analyze = i => an[i] ||= search(pos[i], +$('think').value);
+
+function play(m) {
+  const s = cur(), rec = { m, san: san(s, m), by: s.turn === you() ? 'you' : 'opp', ply: pos.length - 1 };
+  played.push(rec); pos.push(m.next || make(s, m)); sel = null;
+  if (rec.by === 'opp') { const h = loadH(), k = posKey(s); h[k] ||= {}; h[k][rec.san] = (h[k][rec.san] || 0) + 1; saveH(h); }
+  render(); think();
+}
+
+function think() {
+  busy = true; render();
+  // ponytail: search blocks the main thread for the think time; move it to a Web Worker if the freeze bothers anyone
+  setTimeout(() => {
+    gradeLast();
+    if (!status(cur())) analyze(pos.length - 1);
+    busy = false; render();
+  }, 30);
+}
+
+function gradeLast() {
+  const rec = played.at(-1);
+  if (!rec || rec.grade) return;
+  const s = pos[rec.ply], a = analyze(rec.ply), best = a.moves[0], mine = a.moves.find(x => same(x.m, rec.m));
+  const loss = Math.max(0, best.v - mine.v);
+  Object.assign(rec, {
+    grade: grade(loss), loss, why: explain(s, rec.m),
+    white: s.turn === 'w' ? mine.v : -mine.v,
+    better: loss > 50 ? { san: san(s, best.m), v: best.v, why: explain(s, best.m) } : null,
+  });
+}
+
+function click(sq) {
+  const s = cur();
+  if (busy || status(s)) return;
+  if (sel !== null) {
+    const c = legal(s).filter(m => m.from === sel && m.to === sq);
+    if (c.length) return play(c.find(m => !m.promo || m.promo.toLowerCase() === $('promo').value));
+  }
+  sel = color(s.b[sq]) === s.turn && sel !== sq ? sq : null;
+  renderBoard();
+}
+
+function numbered(s, pv) {
+  const out = [];
+  for (const m of pv) {
+    out.push((s.turn === 'w' ? `${s.full}. ` : out.length ? '' : `${s.full}... `) + san(s, m));
+    s = make(s, m);
+  }
+  return out.join(' ');
+}
+
+const describe = cp => {
+  if (Math.abs(cp) > MATE - 100) return `${cp > 0 ? 'White' : 'Black'} has a forced mate`;
+  const side = cp > 0 ? 'White' : 'Black', a = Math.abs(cp);
+  return a < 30 ? 'Roughly equal' : a < 100 ? `${side} is slightly better` : a < 250 ? `${side} is better` : `${side} is winning`;
+};
+const label = rec => `${Math.floor(rec.ply / 2) + 1}${rec.ply % 2 ? '...' : '.'} ${rec.san}`;
+const sideName = by => by === 'you' ? 'you' : 'opponent';
+
+function renderBoard() {
+  const s = cur(), last = played.at(-1)?.m, a = an[pos.length - 1];
+  const best = $('hint').checked && !busy && a?.moves[0]?.m;
+  const targets = sel === null ? [] : legal(s).filter(m => m.from === sel);
+  const html = [];
+  for (let i = 0; i < 64; i++) {
+    const sq = flipped ? 63 - i : i, r = sq >> 3, f = sq & 7, p = s.b[sq], t = targets.find(m => m.to === sq);
+    const cls = ['sq', (r + f) % 2 ? 'd' : 'l',
+      last && (last.from === sq || last.to === sq) && 'last', sel === sq && 'sel',
+      best && (best.from === sq || best.to === sq) && 'best', t && 'dot', t?.captured && 'cap'].filter(Boolean).join(' ');
+    const fileLbl = i >= 56 ? `<span class="coord f">${'abcdefgh'[f]}</span>` : '';
+    const rankLbl = i % 8 === 0 ? `<span class="coord r">${8 - r}</span>` : '';
+    html.push(`<button class="${cls}" data-sq="${sq}" aria-label="${sqName(sq)}${p ? ' ' + (color(p) === 'w' ? 'white ' : 'black ') + NAME[p.toLowerCase()] : ''}">` +
+      (p ? `<span class="pc ${color(p)}">${GLYPH[p.toLowerCase()]}︎</span>` : '') + fileLbl + rankLbl + '</button>');
+  }
+  $('board').innerHTML = html.join('');
+}
+
+function render() {
+  renderBoard();
+  const s = cur(), i = pos.length - 1, a = an[i], over = status(s), top = a?.moves[0];
+
+  // Eval bar + text (White's view)
+  const white = over ? (inCheck(s) && over.startsWith('Check') ? (s.turn === 'w' ? -MATE : MATE) : 0)
+    : top ? (s.turn === 'w' ? top.v : -top.v) : played.at(-1)?.white ?? 0;
+  const pct = Math.abs(white) > MATE - 100 ? (white > 0 ? 0 : 100) : 50 - 50 * Math.tanh(white / 400);
+  $('evalfill').style.height = pct + '%';
+  $('evaltext').textContent = `Eval ${fmtScore(white)} · ${describe(white)}`;
+  $('searchinfo').textContent = busy ? 'Thinking…' : a ? `Depth ${a.depth} · ${a.nodes.toLocaleString()} nodes · alpha-beta` : '';
+
+  // Recommendation
+  const turnIsYou = s.turn === you();
+  if (over) $('recCard').innerHTML = `<p class="lbl">Game over</p><p class="big status">${over}</p>`;
+  else if (busy || !top) $('recCard').innerHTML = `<p class="lbl">Recommended move</p><p class="big">Thinking…</p>`;
+  else {
+    const alts = a.moves.slice(1, 4).map(x => `${san(s, x.m)} (${fmtScore(x.v)})`).join(', ');
+    $('recCard').innerHTML = `
+      <p class="lbl"><span>${turnIsYou ? 'Best move for you' : "Engine's best move for your opponent"}</span>
+        <span class="pill success">${fmtScore(top.v)}</span></p>
+      <p class="big">${numbered(s, [top.m])}</p>
+      <ul class="why">${explain(s, top.m).map(w => `<li>${esc(w)}</li>`).join('')}</ul>
+      ${top.pv.length > 1 ? `<p class="small">Expected line: ${numbered(s, top.pv.slice(0, 6))}</p>` : ''}
+      ${alts ? `<p class="small">Alternatives: ${alts}</p>` : ''}`;
+  }
+
+  // Last move evaluation
+  const rec = played.at(-1);
+  if (!rec) $('lastCard').innerHTML = `<p class="lbl">Last move</p><p class="small" style="margin:0">Click a piece, then a square, to enter a move for either side. The side to move comes from the board, and "You play" tells the engine which side is yours.</p>`;
+  else if (!rec.grade) $('lastCard').innerHTML = `<p class="lbl">Last move: ${label(rec)} (${sideName(rec.by)})</p><p class="small">Evaluating…</p>`;
+  else $('lastCard').innerHTML = `
+    <p class="lbl"><span>Last move: ${label(rec)} (${sideName(rec.by)})</span>
+      <span class="pill ${rec.grade.tone}">${rec.grade.label}${rec.loss > 15 ? ` · −${(rec.loss / 100).toFixed(2)}` : ''}</span></p>
+    <ul class="why">${rec.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul>
+    ${rec.better ? `<p class="small">Better was <b>${rec.better.san}</b> (${fmtScore(rec.better.v)}): ${esc(rec.better.why[0])}</p>` : ''}`;
+
+  // Opponent prediction
+  if (over) $('predCard').innerHTML = `<p class="lbl">Predicted opponent move</p><p class="small" style="margin:0">The game has ended.</p>`;
+  else if (turnIsYou || busy || !top) $('predCard').innerHTML = `<p class="lbl">Predicted opponent move</p><p class="small" style="margin:0">${turnIsYou && top?.pv[1] ? `After ${san(s, top.m)}, the engine expects ${san(top.m.next, top.pv[1])}. ` : ''}Full predictions appear when it's your opponent's turn.</p>`;
+  else {
+    const { rows, seen } = predict(s, a);
+    $('predCard').innerHTML = `<p class="lbl">Predicted opponent move</p>
+      <div class="pred">${rows.map(r => `<span>${r.san}</span><div class="track"><div style="width:${Math.round(r.p * 100)}%"></div></div><span style="color:var(--muted)">${Math.round(r.p * 100)}%</span>`).join('')}</div>
+      <p class="small">${seen ? `Mixes engine scores with ${seen} past opponent move${seen > 1 ? 's' : ''} from this position` : 'Based on engine scores. Opponent moves you enter are remembered for next time.'}</p>`;
+  }
+
+  // Move list
+  let ml = '';
+  played.forEach((r, j) => {
+    if (r.ply % 2 === 0 || j === 0) ml += `<span style="color:var(--faint)">${Math.floor(r.ply / 2) + 1}.</span>` + (r.ply % 2 ? '<span>…</span>' : '');
+    ml += `<span class="m" title="${r.grade?.label || ''}">${r.san}${r.grade ? `<span class="mark" style="color:${TONE_BG[r.grade.label]}">●</span>` : ''}</span>`;
+  });
+  $('moves').innerHTML = ml || '<span style="grid-column:1/-1;color:var(--faint)">No moves yet</span>';
+
+  renderTally(); renderGraph();
+}
+
+function predict(s, a) {
+  const top = a.moves.slice(0, 8), e = top.map(x => Math.exp((x.v - top[0].v) / 80));
+  const es = e.reduce((x, y) => x + y, 0), h = loadH()[posKey(s)] || {};
+  const seen = Object.values(h).reduce((x, y) => x + y, 0);
+  const rows = top.map((x, j) => { const sn = san(s, x.m); return { san: sn, p: seen ? .5 * e[j] / es + .5 * (h[sn] || 0) / seen : e[j] / es }; });
+  const total = rows.reduce((x, r) => x + r.p, 0);
+  rows.forEach(r => r.p /= total);
+  return { rows: rows.sort((x, y) => y.p - x.p).slice(0, 3), seen };
+}
+
+function renderTally() {
+  const block = by => {
+    const g = played.filter(r => r.by === by && r.grade), n = g.length;
+    const counts = GRADES.map(l => [l, g.filter(r => r.grade.label === l).length]).filter(c => c[1]);
+    return `<p class="lbl">${by === 'you' ? 'You' : 'Opponent'} · ${n} move${n === 1 ? '' : 's'}</p>
+      <div class="tally">${counts.map(([l, c]) => `<div title="${l}: ${c}" style="width:${c / n * 100}%;background:${TONE_BG[l]}"></div>`).join('')}</div>
+      <p class="small" style="margin:-4px 0 8px">${counts.map(([l, c]) => `${c} ${l.toLowerCase()}`).join(', ') || 'No graded moves yet'}</p>`;
+  };
+  $('tally').innerHTML = block('you') + block('opp');
+}
+
+function renderGraph() {
+  const start = an[0]?.moves[0]?.v ?? 0;
+  const vals = [start, ...played.filter(r => r.grade).map(r => r.white)];
+  const y = v => 45 - 40 * Math.tanh(v / 400);
+  const step = vals.length > 1 ? 400 / (vals.length - 1) : 0;
+  const pts = vals.map((v, j) => `${(j * step).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  $('graph').innerHTML = `<line x1="0" y1="45" x2="400" y2="45" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
+    <polyline fill="none" stroke="#378add" stroke-width="2" points="${pts}" vector-effect="non-scaling-stroke"/>`;
+  $('graph').style.color = 'var(--muted)';
+}
+
+$('board').addEventListener('click', e => { const b = e.target.closest('[data-sq]'); if (b) click(+b.dataset.sq); });
+$('undo').onclick = () => { if (busy || !played.length) return; played.pop(); pos.pop(); an.length = Math.min(an.length, pos.length); sel = null; render(); if (!an[pos.length - 1]) think(); };
+$('flip').onclick = () => { flipped = !flipped; renderBoard(); };
+$('you').onchange = () => { flipped = you() === 'b'; render(); };
+$('hint').onchange = renderBoard;
+$('reset').onclick = () => { if (!busy) reset(); };
+reset();
+</script>
+</body>
+</html>
