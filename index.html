@@ -269,12 +269,14 @@ function render() {
   if (over) $('recCard').innerHTML = `<p class="lbl">Game over</p><p class="big status">${over}</p>`;
   else if (busy || !top) $('recCard').innerHTML = `<p class="lbl">Recommended move</p><p class="big">Thinking…</p>`;
   else {
-    const alts = a.moves.slice(1, 4).map(x => `${san(s, x.m)} (${fmtScore(x.v)})`).join(', ');
+    const alts = a.moves.slice(1).filter(x => x.exact).slice(0, 3).map(x => `${san(s, x.m)} (${fmtScore(x.v)})`).join(', ');
+    const mating = top.v > MATE - 100 && top.pv.length > 1;
     $('recCard').innerHTML = `
       <p class="lbl"><span>${turnIsYou ? 'Best move for you' : "Engine's best move for your opponent"}</span>
         <span class="pill success">${fmtScore(top.v)}</span></p>
       <p class="big">${numbered(s, [top.m])}</p>
-      <ul class="why">${explain(s, top.m).map(w => `<li>${esc(w)}</li>`).join('')}</ul>
+      <ul class="why">${(mating ? [`Forces checkmate in ${Math.ceil((MATE - top.v) / 2)}. Winning beats any positional gain.`] : [])
+        .concat(explain(s, top.m).filter(w => !(mating && w.startsWith('Careful')))).map(w => `<li>${esc(w)}</li>`).join('')}</ul>
       ${top.pv.length > 1 ? `<p class="small">Expected line: ${numbered(s, top.pv.slice(0, 6))}</p>` : ''}
       ${alts ? `<p class="small">Alternatives: ${alts}</p>` : ''}`;
   }

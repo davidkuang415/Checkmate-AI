@@ -173,11 +173,21 @@ function san(s, m) {
   return out;
 }
 
-// Static evaluation in centipawns from White's view: material + piece-square tables.
+const dist = (a, b) => Math.abs((a >> 3) - (b >> 3)) + Math.abs((a & 7) - (b & 7));
+const centerDist = sq => Math.max(3 - (sq >> 3), (sq >> 3) - 4) + Math.max(3 - (sq & 7), (sq & 7) - 4);
+
+// Static evaluation in centipawns from White's view: material + piece-square tables,
+// plus "play to win" terms once one side is clearly ahead.
 function evaluate(s) {
   const b = s.b;
-  let score = 0, npm = 0;
-  for (let i = 0; i < 64; i++) { const p = b[i]; if (p && !'kKpP'.includes(p)) npm += VAL[p.toLowerCase()]; }
+  let score = 0, npm = 0, mat = 0;
+  for (let i = 0; i < 64; i++) {
+    const p = b[i];
+    if (!p || p === 'k' || p === 'K') continue;
+    const v = VAL[p.toLowerCase()];
+    mat += p === p.toUpperCase() ? v : -v;
+    if (!'pP'.includes(p)) npm += v;
+  }
   const endgame = npm <= 2600;
   for (let i = 0; i < 64; i++) {
     const p = b[i];
@@ -185,6 +195,16 @@ function evaluate(s) {
     const t = p.toLowerCase(), w = p !== t;
     const v = VAL[t] + (t === 'k' && endgame ? PST.ke : PST[t])[w ? i : i ^ 56];
     score += w ? v : -v;
+  }
+  if (Math.abs(mat) >= 200) {
+    const sign = Math.sign(mat);
+    // Ahead in material: trades favor the winning side (fewer pieces left = easier win).
+    score += sign * Math.max(0, 6200 - npm) / 40;
+    // Endgame: drive the losing king to the edge and bring our king close so checkmate actually happens.
+    if (endgame) {
+      const wk = kingSq(b, 'w'), bk = kingSq(b, 'b'), loser = sign > 0 ? bk : wk;
+      score += sign * (12 * centerDist(loser) + 5 * (14 - dist(wk, bk)));
+    }
   }
   return score;
 }
@@ -218,9 +238,12 @@ function search(s, ms = 1000, maxDepth = 30) {
 
   function nm(s, d, a, bt, ply) {
     tick();
+    const check = inCheck(s);
+    // Check extension: keep searching forcing lines one ply deeper so forced mates aren't cut off at the horizon.
+    if (check && ply < 24) d++;
     if (d <= 0) return { v: qs(s, a, bt), pv: [] };
     const moves = legal(s);
-    if (!moves.length) return { v: inCheck(s) ? -MATE + ply : 0, pv: [] };
+    if (!moves.length) return { v: check ? -MATE + ply : 0, pv: [] };
     if (s.half >= 100) return { v: 0, pv: [] };
     moves.sort((x, y) => mvv(y) - mvv(x));
     let best = { v: -Infinity, pv: [] };
@@ -241,7 +264,7 @@ function search(s, ms = 1000, maxDepth = 30) {
       for (const rm of root) {
         // ponytail: root window is best-300cp, so moves >3 pawns worse get only an upper bound (graded "blunder" either way)
         const r = nm(rm.m.next, d - 1, -MATE - 1, -alpha, 1), v = -r.v;
-        scored.push({ m: rm.m, v, pv: [rm.m, ...r.pv] });
+        scored.push({ m: rm.m, v, pv: [rm.m, ...r.pv], exact: v > alpha }); // exact=false: v is only an upper bound
         if (v - 300 > alpha) alpha = v - 300;
       }
       scored.sort((x, y) => y.v - x.v);
